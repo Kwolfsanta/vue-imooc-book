@@ -13,7 +13,6 @@ const whiteList = ['/login', '/auth-redirect'] // no redirect whitelist
 router.beforeEach(async(to, from, next) => {
   // start progress bar
   NProgress.start()
-
   // set page title
   document.title = getPageTitle(to.meta.title)
 
@@ -23,7 +22,12 @@ router.beforeEach(async(to, from, next) => {
   if (hasToken) {
     if (to.path === '/login') {
       // if is logged in, redirect to the home page
-      next({ path: '/' })
+      if (!store.getters.isTokenExpired) {
+        // token没有过期才去path: '/'，否则的话会去请求userInfo，然后没有token就会报错回到login，然后无限循环
+        console.log('这还能进？？')
+        next({ path: '/' })
+      }
+      next()
       NProgress.done() // hack: https://github.com/PanJiaChen/vue-element-admin/pull/2939
     } else {
       // determine whether the user has obtained his permission roles through getInfo
@@ -45,11 +49,21 @@ router.beforeEach(async(to, from, next) => {
           // hack method to ensure that addRoutes is complete
           // set the replace: true, so the navigation will not leave a history record
           next({ ...to, replace: true })
-        } catch (error) {
+        } catch (err) {
           // remove token and go to login page to re-login
-          await store.dispatch('user/resetToken')
-          Message.error(error || 'Has Error')
-          next(`/login?redirect=${to.path}`)
+          // await store.dispatch('user/resetToken')
+          Message.error(err || 'Has Error')
+          // console.log({ err })
+          const error = { err }
+          // console.log(response)
+          console.log(error)
+          // console.log({ error })
+          const { data } = error.err.response
+          if (data.error === 402 && data.msg === 'jwt expired') {
+            console.log(data)
+            next(`/login`)
+            store.dispatch('app/setTokenExpired', true)
+          }
           NProgress.done()
         }
       }
